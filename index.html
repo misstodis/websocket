@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Socket.IO chat</title>
+    <style>
+        body { margin: 0; padding-bottom: 3rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+        #form { background: rgba(0, 0, 0, 0.15); padding: 0.25rem; position: fixed; bottom: 0; left: 0; right: 0; display: flex; height: 3rem; box-sizing: border-box; backdrop-filter: blur(10px); }
+        #input { border: none; padding: 0 1rem; flex-grow: 1; border-radius: 2rem; margin: 0.25rem; }
+        #input:focus { outline: none; }
+        #form > button { background: #333; border: none; padding: 0 1rem; margin: 0.25rem; border-radius: 3px; outline: none; color: #fff; }
+
+        #messages { list-style-type: none; margin: 0; padding: 0; }
+        #messages > li { padding: 0.5rem 1rem; }
+        #messages > li:nth-child(odd) { background: #efefef; }
+
+        .typing {
+            width: 5em;
+            height: 2em;
+            position: relative;
+            padding: 10px;
+            margin-left: 5px;
+            background: #e6e6e6;
+            border-radius: 20px;
+            margin-top: 10%;
+            display: none;
+        }
+
+        .typing__dot {
+            float: left;
+            width: 8px;
+            height: 8px;
+            margin: 0 4px;
+            background: #8d8c91;
+            border-radius: 50%;
+            opacity: 0;
+            animation: loadingFade 1s infinite;
+        }
+
+        .typing__dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .typing__dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing__dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes loadingFade {
+            0% {
+                opacity: 0;
+            }
+            50% {
+                opacity: 0.8;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
+    </style>
+</head>
+<body>
+<div style="margin-bottom: 3rem; background: orange">
+    online users: <span id="online-users"></span>
+</div>
+
+<ul id="messages"></ul>
+<div class="typing">
+    <div class="typing__dot"></div>
+    <div class="typing__dot"></div>
+    <div class="typing__dot"></div>
+</div>
+
+<form id="form" action="">
+    <p><strong id="userName">name</strong></p>
+    <input id="input" autocomplete="off" /><button>Send</button>
+    <button id="toggle-btn">Disconnect</button>
+</form>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    let counter = 0;
+    let name = prompt("Please enter your name:");
+
+    // when client connect to the server, the client can send an object with an auth property in the options object of the io() function
+    // on the server, the auth object will be available in the socket.handshake.auth property of the socket object
+    const socket = io({
+        auth: {
+            serverOffset: 0
+        },
+        //enable retries
+        // the client will wait for an acknowledgment from the server for 2 seconds before it considers the event to have failed
+        ackTimeout: 2000,
+        // the client will try to reconnect to the server 3 times before it gives up
+        retries: 3,
+    });
+
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const messagesElement = document.getElementById('messages');
+    const userName = document.getElementById('userName');
+    const userIsTypingElement = document.querySelector('.typing');
+    const onlineUsersElement = document.getElementById('online-users');
+
+    if (name){
+        userName.textContent = name;
+
+        // Emit an event to the server with the name of the user who joined the chat
+        socket.emit('userJoinChat', name);
+    }
+
+    input.addEventListener('input', (e) => {
+        const value = e.target.value;
+
+        if (value === '') {
+            socket.emit('userIsTyping', false);
+            return;
+        }
+
+        socket.emit('userIsTyping', true);
+    });
+
+    socket.on('userIsTyping', (isTyping) => {
+        userIsTypingElement.style.display = isTyping ? 'block' : 'none';
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (input.value) {
+            // compute a unique offset
+            const clientOffset = `${socket.id}-${counter++}`;
+
+            // Emit the message to the server is "chat message" event + unique client offset
+            socket.emit('chat message',{
+                userName : name,
+                message : input.value
+            }, clientOffset);
+
+            const item = document.createElement('li');
+            item.textContent = `${name}: ${input.value}`;
+            messagesElement.appendChild(item);
+
+            input.value = '';
+        }
+    });
+
+    // Listen for the "chat message" event from the server and display the message in the list of messages
+    socket.on('chat message', (msg, serverOffset) => {
+        const item = document.createElement('li');
+        item.textContent = `${msg.userName}: ${msg.message}`;
+        messagesElement.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+
+        //set the server offset in the client
+        socket.auth.serverOffset = serverOffset;
+    });
+
+
+    // Listen for the "userJoinChat" event from the server and display an alert with the message
+    socket.on('userJoinChat',(userName)=>{
+        const item = document.createElement('li');
+        item.textContent = `User with name "${userName}" joined the chat`;
+        messagesElement.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+
+        onlineUsersElement.textContent = `${onlineUsersElement.textContent }, ${userName}`;
+    })
+
+    // Emit an event with a timeout of 5 seconds
+    // if the server does not acknowledge the event within the given delay,
+    // an error will be returned in the callback function
+    // socket.timeout(5000).emit('request', { foo: 'bar' }, 'baz', 'test', (err, response) => {
+    //     if (err) {
+    //         // the server did not acknowledge the event in the given delay
+    //         console.log("hier is een error: " + err); // prints "hier is een error: [Error: timeout]"
+    //     } else {
+    //         console.log(response.status);
+    //     }
+    // });
+
+    // ----------------------- Toggle disconnection -----------------------
+    const toggleButton = document.getElementById('toggle-btn');
+
+    toggleButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (socket.connected) {
+            toggleButton.innerText = 'Connect';
+            socket.disconnect();
+
+            console.log("Client disconect to the server");
+            console.log(socket);
+        } else {
+            toggleButton.innerText = 'Disconnect';
+
+            console.log("Client reconnected to the server");
+            console.log(socket);
+            socket.connect();
+        }
+    });
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Socket.IO chat</title>
+    <style>
+        body {
+            margin: 0;
+            padding-bottom: 3rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-image: url('https://m.media-amazon.com/images/S/pv-target-images/97bbbb1dd00a72b5bf99be25a2c2159758a635be27d550598ca1540de246aa57._SX1080_FMjpg_.jpg');
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-attachment: fixed;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            z-index: 0;
+        }
+
+        ul, form {
+            position: relative;
+            z-index: 1;
+        }
+
+        #form { background: rgba(0, 0, 0, 0.15); padding: 0.25rem; position: fixed; bottom: 0; left: 0; right: 0; display: flex; height: 3rem; box-sizing: border-box; backdrop-filter: blur(10px); }
+        #input { border: none; padding: 0 1rem; flex-grow: 1; border-radius: 2rem; margin: 0.25rem; }
+        #input:focus { outline: none; }
+        #form > button { background: #333; border: none; padding: 0 1rem; margin: 0.25rem; border-radius: 3px; outline: none; color: #fff; }
+
+        #messages { list-style-type: none; margin: 0; padding: 0; }
+        #messages > li { padding: 0.5rem 1rem; }
+        #messages > li:nth-child(odd) { background: rgba(155, 244, 173, 0.6); }
+        #messages > li:nth-child(even) { background: rgba(127, 179, 244, 0.6); }
+    </style>
+</head>
+<body>
+
+<ul id="messages"></ul>
+<form id="form" action="">
+    <input id="input" autocomplete="off" /><button>Send</button>
+</form>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const messages = document.getElementById('messages');
+    const room = 'room-anime';
+
+    // Ask the server to join the room
+    socket.emit('join-room', room);
+
+    // Listen for user joining the room
+    socket.on('user join room-anime', (msg) => {
+        const item = document.createElement('li');
+        item.textContent = msg;
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+    });
+
+    // Listen for incoming chat messages in the room
+    socket.on('chat message', (msg) => {
+        const item = document.createElement('li');
+        item.textContent = msg;
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (input.value) {
+            // Send the message along with the room name
+            // so the server can broadcast it to the correct room
+            socket.emit('chat message', { room, msg: input.value });
+            input.value = '';
+        }
+    });
+</script>
+
+</body>
+</html>
